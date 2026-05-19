@@ -1,9 +1,20 @@
-from openai import OpenAI
-client = OpenAI()
+# app/backend/main.py
+# Entry point — FastAPI app setup + CORS + router registration only
 
-response = client.responses.create(
-    model="gpt-5.5",
-    input="Write a one-sentence bedtime story about a unicorn."
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.backend.routes import router
+
+# ── App ───────────────────────────────────────────────────────
+app = FastAPI(title="GPT Chatbot API", version="1.0.0")
+
+# ── CORS (allow frontend to call the API) ─────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],     # lock down to specific origin in production
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-print(response.output_text)
+# ── Register routes ───────────────────────────────────────────
+app.include_router(router)

@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+app/frontend/data/chats.json
+app/frontend/data/users/
+

@@ -9,6 +9,9 @@ from app.backend.config import load_env, openai_configured
 
 load_env()
 
+from app.backend.auth_routes import router as auth_router  # noqa: E402
+from app.backend.db.database import SessionLocal, init_db  # noqa: E402
+from app.backend.auth.service import ensure_bootstrap_admin  # noqa: E402
 from app.backend.routes import router  # noqa: E402
 
 logging.basicConfig(
@@ -25,11 +28,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router, prefix="/api")
 app.include_router(router, prefix="/api")
 
 
 @app.on_event("startup")
-def startup_check():
+def startup():
+    init_db()
+    db = SessionLocal()
+    try:
+        ensure_bootstrap_admin(db)
+        logging.info("Database ready; bootstrap admin checked")
+    finally:
+        db.close()
+
     if openai_configured():
         logging.info("OpenAI API key loaded")
     else:
@@ -44,6 +56,7 @@ def root():
         "service": "GPT Chatbot API",
         "docs": "/docs",
         "health": "/api/health",
+        "auth": "/api/auth/login",
         "openai_configured": openai_configured(),
         "ui": "Run Streamlit: streamlit run app/frontend/streamlit_app.py",
     }

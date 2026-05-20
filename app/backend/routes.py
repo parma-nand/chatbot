@@ -1,8 +1,13 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from app.backend.auth.dependencies import get_current_user, require_admin
 from app.backend.config import openai_configured
+from app.backend.db.database import get_db
+from app.backend.db.models import User
 from app.backend.llm import stream_chat_reply
 from app.backend.search import web_search
 from app.shared.chat_presets import get_modes, should_use_search
@@ -30,21 +35,30 @@ class SearchRequest(BaseModel):
 
 
 @router.get("/health")
-def health():
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        db_ok = False
     return {
         "status": "ok",
         "openai_configured": openai_configured(),
+        "database": "ok" if db_ok else "error",
     }
 
 
 @router.get("/modes")
-def modes():
+def modes(_user: User = Depends(get_current_user)):
     return {"modes": get_modes()}
 
 
 @router.post("/search")
-def search(req: SearchRequest):
-    """Direct web search (for testing and sidebar preview)."""
+def search(
+    req: SearchRequest,
+    _admin: User = Depends(require_admin),
+):
+    """Direct web search — admin only."""
     try:
         text = web_search(req.query, engine=req.engine, max_results=req.max_results)
         return {"query": req.query, "engine": req.engine, "results": text}
@@ -57,6 +71,7 @@ def search_get(
     q: str = Query(..., min_length=1),
     engine: str = "duckduckgo",
     max_results: int = Query(3, ge=1, le=10),
+    _admin: User = Depends(require_admin),
 ):
     try:
         text = web_search(q, engine=engine, max_results=max_results)
@@ -66,7 +81,7 @@ def search_get(
 
 
 @router.post("/chat")
-def chat(req: ChatRequest):
+def chat(req: ChatRequest, _user: User = Depends(get_current_user)):
     if not openai_configured():
         raise HTTPException(
             status_code=503,

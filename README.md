@@ -1,83 +1,100 @@
 # GPT Chatbot
 
-A chatbot with **OpenAI** replies and optional **real-time web search** (DuckDuckGo or Tavily), served by a **FastAPI** backend and a **Streamlit** UI.
+A chatbot with **OpenAI** replies, **JWT authentication** (user & admin roles), **PostgreSQL** user storage, optional **web search**, **FastAPI** backend, and **Streamlit** UI.
 
 ## Project layout
 
 ```
 chatbot/
 ├── app/
-│   ├── backend/          # FastAPI API (chat, search, health)
-│   ├── frontend/         # Streamlit UI
-│   └── shared/           # Modes & search-trigger helpers
+│   ├── backend/
+│   │   ├── auth/           # JWT, passwords, dependencies
+│   │   ├── db/             # SQLAlchemy models (PostgreSQL)
+│   │   ├── auth_routes.py  # register, login, me
+│   │   └── routes.py       # chat (auth required)
+│   ├── frontend/           # Streamlit UI + per-user chat history
+│   └── shared/
 ├── docker/
-│   ├── backend.Dockerfile
-│   └── frontend.Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── requirements-backend.txt
-├── requirements-frontend.txt
-├── .env.example
-└── test_search.py
+├── docker-compose.yml      # db + backend + frontend
+└── .env.example
+```
+
+## Authentication
+
+| Role  | Capabilities |
+|-------|----------------|
+| **user**  | Register, login, chat, own chat history |
+| **admin** | Everything users have + **Admin settings** (personality, search engine, API URL, test search) |
+
+**API endpoints**
+
+- `POST /api/auth/register` — email, password, optional phone
+- `POST /api/auth/login` — returns JWT `access_token`
+- `GET /api/auth/me` — current user (Bearer token)
+- `GET /api/auth/users` — list users (admin only)
+
+Chat and search endpoints require `Authorization: Bearer <token>`.
+
+On first startup, an **admin** account is created from `.env` if none exists:
+
+```env
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=adminchange123
 ```
 
 ## Setup (local)
 
-1. Create `.env` in the project root (same folder as `docker-compose.yml`) with your OpenAI key:
+1. Copy and edit environment:
 
    ```bash
    cp .env.example .env
    ```
 
-   Edit `.env` and set `OPENAI_API_KEY=sk-...` from [OpenAI API keys](https://platform.openai.com/api-keys).
+   Set `OPENAI_API_KEY`, `JWT_SECRET_KEY`, and `DATABASE_URL`.
 
-   **Restart the backend** after changing `.env`.
+2. Start PostgreSQL (easiest via Docker):
 
-2. Install dependencies:
+   ```bash
+   docker compose up db -d
+   ```
+
+3. Install dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Run the API (terminal 1):
+4. Run API:
 
    ```bash
    uvicorn app.backend.main:app --reload --host 0.0.0.0 --port 8000
    ```
 
-4. Run the UI (terminal 2):
+5. Run UI:
 
    ```bash
    streamlit run app/frontend/streamlit_app.py
    ```
 
-5. Open **http://localhost:8501**
+6. Open **http://localhost:8501** → **Register** or **Login** as admin.
 
-## Web search
-
-Search runs when any of these is true:
-
-- **Personality** is set to **Web search**
-- **Always search the web** is checked in the sidebar
-- The message contains trigger words (e.g. `latest`, `today`, `news`, `2026`)
-
-Use **Test search only** in the sidebar to verify DuckDuckGo/Tavily without calling the LLM.
-
-```bash
-python test_search.py
-```
-
-For Tavily, set `TAVILY_API_KEY` in `.env` and choose **tavily** as the search engine.
-
-## Docker
-
-From the project root (with `.env` present):
+## Docker (full stack)
 
 ```bash
 docker compose up --build
 ```
 
-- API: http://localhost:8000 (docs at `/docs`)
-- UI: http://localhost:8501
+- UI: http://localhost:8501  
+- API: http://localhost:8000/docs  
+- Postgres: `localhost:5432` (user/password/db: `chatbot`)
 
-Stop with `docker compose down`.
+## User data in PostgreSQL
+
+The `users` table stores:
+
+- `email` (unique, login)
+- `hashed_password` (bcrypt, never plain text)
+- `phone` (optional, unique)
+- `role` (`user` or `admin`)
+
+Tables are created automatically on backend startup.

@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements-frontend.txt
 COPY app ./app
 COPY .streamlit ./.streamlit
 
+RUN mkdir -p app/frontend/data
+
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
